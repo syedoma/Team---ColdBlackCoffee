@@ -11,16 +11,19 @@ function HeatmapLayer({ points }) {
     if (points.length === 0) return;
 
     const heat = L.heatLayer(points, {
-      radius: 18,
-      blur: 25,
-      maxZoom: 17,
+      radius: 8,
+      blur: 10,
+      maxZoom: 15,
+      minOpacity: 0.3,
       gradient: {
-        0.0: "#3b82f6",
-        0.3: "#22d3ee",
-        0.5: "#4ade80",
-        0.7: "#facc15",
-        0.9: "#f97316",
-        1.0: "#ef4444",
+        0.0: "#0d0221",
+        0.2: "#3d1a78",
+        0.4: "#7b2a95",
+        0.5: "#c94b8c",
+        0.6: "#e16a52",
+        0.75: "#f39c12",
+        0.9: "#f7dc6f",
+        1.0: "#fffef2",
       },
     }).addTo(map);
 
@@ -35,14 +38,24 @@ function HeatmapLayer({ points }) {
 function Map({ potholes }) {
   const detroitCenter = [42.3514, -83.0658];
 
+  // Detroit bounding box - locks the map to this area
+  const detroitBounds = [
+    [42.25, -83.3], // Southwest corner
+    [42.5, -82.9], // Northeast corner
+  ];
+
   const points = potholes
     .filter((p) => p.latitude && p.longitude)
-    .map((p) => [p.latitude, p.longitude, 0.5]);
+    .map((p) => [p.latitude, p.longitude, 0.3]);
 
   return (
     <MapContainer
       center={detroitCenter}
-      zoom={11}
+      zoom={12}
+      minZoom={11}
+      maxZoom={18}
+      maxBounds={detroitBounds}
+      maxBoundsViscosity={1.0}
       style={{ height: "100%", width: "100%" }}
       zoomControl={true}
     >
@@ -52,7 +65,7 @@ function Map({ potholes }) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
       />
 
-      {/* Heatmap goes in the middle */}
+      {/* Heatmap */}
       <HeatmapLayer points={points} />
 
       {/* Light labels on top */}

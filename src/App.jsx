@@ -27,6 +27,12 @@ function App() {
 
   const openCount = potholeData.filter((p) => p.status === "Open").length;
   const closedCount = potholeData.filter((p) => p.status === "Closed").length;
+  const acknowledgedCount = potholeData.filter(
+    (p) => p.status === "Acknowledged",
+  ).length;
+  const archivedCount = potholeData.filter(
+    (p) => p.status === "Archived",
+  ).length;
 
   return (
     <div className="App">
@@ -63,19 +69,31 @@ function App() {
           className={`filter-btn ${filter === "all" ? "active" : ""}`}
           onClick={() => setFilter("all")}
         >
-          All Potholes
+          All ({potholeData.length.toLocaleString()})
         </button>
         <button
           className={`filter-btn ${filter === "Open" ? "active" : ""}`}
           onClick={() => setFilter("Open")}
         >
-          Open Only
+          Open ({openCount})
+        </button>
+        <button
+          className={`filter-btn ${filter === "Acknowledged" ? "active" : ""}`}
+          onClick={() => setFilter("Acknowledged")}
+        >
+          Acknowledged ({acknowledgedCount})
         </button>
         <button
           className={`filter-btn ${filter === "Closed" ? "active" : ""}`}
           onClick={() => setFilter("Closed")}
         >
-          Closed Only
+          Closed ({closedCount})
+        </button>
+        <button
+          className={`filter-btn ${filter === "Archived" ? "active" : ""}`}
+          onClick={() => setFilter("Archived")}
+        >
+          Archived ({archivedCount})
         </button>
       </div>
 

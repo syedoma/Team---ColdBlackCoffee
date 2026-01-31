@@ -1,13 +1,21 @@
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import "leaflet.heat";
 
 function HeatmapLayer({ points }) {
   const map = useMap();
+  const heatLayerRef = useRef(null);
 
   useEffect(() => {
+    // Remove old heatmap layer if it exists
+    if (heatLayerRef.current) {
+      map.removeLayer(heatLayerRef.current);
+      heatLayerRef.current = null;
+    }
+
+    // Don't create layer if no points
     if (points.length === 0) return;
 
     // Adjust heatmap settings based on number of points
@@ -35,7 +43,8 @@ function HeatmapLayer({ points }) {
 
     const adjustedPoints = points.map((p) => [p[0], p[1], intensity]);
 
-    const heat = L.heatLayer(adjustedPoints, {
+    // Create new heatmap layer
+    heatLayerRef.current = L.heatLayer(adjustedPoints, {
       radius: radius,
       blur: blur,
       maxZoom: 15,
@@ -52,8 +61,11 @@ function HeatmapLayer({ points }) {
       },
     }).addTo(map);
 
+    // Cleanup on unmount
     return () => {
-      map.removeLayer(heat);
+      if (heatLayerRef.current) {
+        map.removeLayer(heatLayerRef.current);
+      }
     };
   }, [map, points]);
 
@@ -70,7 +82,7 @@ function Map({ potholes }) {
 
   const points = potholes
     .filter((p) => p.latitude && p.longitude)
-    .map((p) => [p.latitude, p.longitude, 0.3]);
+    .map((p) => [p.latitude, p.longitude]);
 
   return (
     <MapContainer
@@ -88,7 +100,7 @@ function Map({ potholes }) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
       />
 
-      {points.length > 0 && <HeatmapLayer points={points} />}
+      <HeatmapLayer key={points.length} points={points} />
 
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"

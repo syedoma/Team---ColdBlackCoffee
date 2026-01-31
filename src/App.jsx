@@ -5,28 +5,25 @@ import "./App.css";
 function App() {
   const [potholeData, setPotholeData] = useState([]);
   const [filter, setFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState("");
   const [loadingProgress, setLoadingProgress] = useState(0);
   const hasStartedFetching = useRef(false);
 
   useEffect(() => {
-    // Prevent double-fetch in React Strict Mode
     if (hasStartedFetching.current) return;
     hasStartedFetching.current = true;
 
-    // First try to get cached data
     fetch("http://localhost:3001/api/potholes")
       .then((response) => response.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
-          // Cache hit - use it immediately
           setPotholeData(data);
           setDataSource("live");
           setLoading(false);
           console.log(`Loaded ${data.length} potholes from cache`);
         } else {
-          // No cache - use streaming endpoint
           streamPotholes();
         }
       })
@@ -38,7 +35,7 @@ function App() {
 
   const streamPotholes = () => {
     setDataSource("streaming");
-    setPotholeData([]); // Clear any existing data
+    setPotholeData([]);
 
     const eventSource = new EventSource(
       "http://localhost:3001/api/potholes/stream",
@@ -55,7 +52,6 @@ function App() {
       } else if (data.error) {
         console.error("Stream error:", data.error);
         eventSource.close();
-        // Fallback to local file
         fetch("/potholes.json")
           .then((res) => res.json())
           .then((localData) => {
@@ -64,7 +60,6 @@ function App() {
             setLoading(false);
           });
       } else if (data.batch) {
-        // Add new batch to existing data
         setPotholeData((prev) => [...prev, ...data.batch]);
         setLoadingProgress(data.total);
       }
@@ -72,7 +67,6 @@ function App() {
 
     eventSource.onerror = () => {
       eventSource.close();
-      // Fallback to local file
       fetch("/potholes.json")
         .then((res) => res.json())
         .then((localData) => {
@@ -83,17 +77,71 @@ function App() {
     };
   };
 
-  const filteredData = potholeData.filter((p) => {
+  // Filter by date
+  const getDateFilteredData = () => {
+    if (dateFilter === "all") return potholeData;
+
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const yearMs = 365 * dayMs;
+
+    let cutoffDate;
+    switch (dateFilter) {
+      case "7days":
+        cutoffDate = now - 7 * dayMs;
+        break;
+      case "30days":
+        cutoffDate = now - 30 * dayMs;
+        break;
+      case "90days":
+        cutoffDate = now - 90 * dayMs;
+        break;
+      case "1year":
+        cutoffDate = now - yearMs;
+        break;
+      case "2025":
+        return potholeData.filter((p) => {
+          if (!p.created_at) return false;
+          const year = new Date(p.created_at).getFullYear();
+          return year === 2025;
+        });
+      case "2024":
+        return potholeData.filter((p) => {
+          if (!p.created_at) return false;
+          const year = new Date(p.created_at).getFullYear();
+          return year === 2024;
+        });
+      case "2023":
+        return potholeData.filter((p) => {
+          if (!p.created_at) return false;
+          const year = new Date(p.created_at).getFullYear();
+          return year === 2023;
+        });
+      default:
+        return potholeData;
+    }
+
+    return potholeData.filter(
+      (p) => p.created_at && p.created_at >= cutoffDate,
+    );
+  };
+
+  const dateFilteredData = getDateFilteredData();
+
+  // Then filter by status
+  const filteredData = dateFilteredData.filter((p) => {
     if (filter === "all") return true;
     return p.status === filter;
   });
 
-  const openCount = potholeData.filter((p) => p.status === "Open").length;
-  const closedCount = potholeData.filter((p) => p.status === "Closed").length;
-  const acknowledgedCount = potholeData.filter(
+  const openCount = dateFilteredData.filter((p) => p.status === "Open").length;
+  const closedCount = dateFilteredData.filter(
+    (p) => p.status === "Closed",
+  ).length;
+  const acknowledgedCount = dateFilteredData.filter(
     (p) => p.status === "Acknowledged",
   ).length;
-  const archivedCount = potholeData.filter(
+  const archivedCount = dateFilteredData.filter(
     (p) => p.status === "Archived",
   ).length;
 
@@ -108,7 +156,7 @@ function App() {
           <p>
             {dataSource === "streaming"
               ? `Loading ${loadingProgress.toLocaleString()} pothole reports...`
-              : `Visualizing ${potholeData.length.toLocaleString()} pothole reports across Detroit to help identify infrastructure priorities.`}
+              : `Visualizing ${filteredData.length.toLocaleString()} pothole reports across Detroit to help identify infrastructure priorities.`}
           </p>
           {dataSource && (
             <span className={`data-badge ${dataSource}`}>
@@ -122,7 +170,7 @@ function App() {
         <div className="stats-container">
           <div className="stat-card">
             <div className="label">Total Reports</div>
-            <div className="value">{potholeData.length.toLocaleString()}</div>
+            <div className="value">{filteredData.length.toLocaleString()}</div>
           </div>
           <div className="stat-card">
             <div className="label">Open</div>
@@ -135,12 +183,67 @@ function App() {
         </div>
       </div>
 
+      {/* Date Filter */}
       <div className="filter-section">
+        <span className="filter-label">Time Period:</span>
+        <button
+          className={`filter-btn ${dateFilter === "all" ? "active" : ""}`}
+          onClick={() => setDateFilter("all")}
+        >
+          All Time
+        </button>
+        <button
+          className={`filter-btn ${dateFilter === "7days" ? "active" : ""}`}
+          onClick={() => setDateFilter("7days")}
+        >
+          Last 7 Days
+        </button>
+        <button
+          className={`filter-btn ${dateFilter === "30days" ? "active" : ""}`}
+          onClick={() => setDateFilter("30days")}
+        >
+          Last 30 Days
+        </button>
+        <button
+          className={`filter-btn ${dateFilter === "90days" ? "active" : ""}`}
+          onClick={() => setDateFilter("90days")}
+        >
+          Last 90 Days
+        </button>
+        <button
+          className={`filter-btn ${dateFilter === "1year" ? "active" : ""}`}
+          onClick={() => setDateFilter("1year")}
+        >
+          Last Year
+        </button>
+        <button
+          className={`filter-btn ${dateFilter === "2025" ? "active" : ""}`}
+          onClick={() => setDateFilter("2025")}
+        >
+          2025
+        </button>
+        <button
+          className={`filter-btn ${dateFilter === "2024" ? "active" : ""}`}
+          onClick={() => setDateFilter("2024")}
+        >
+          2024
+        </button>
+        <button
+          className={`filter-btn ${dateFilter === "2023" ? "active" : ""}`}
+          onClick={() => setDateFilter("2023")}
+        >
+          2023
+        </button>
+      </div>
+
+      {/* Status Filter */}
+      <div className="filter-section">
+        <span className="filter-label">Status:</span>
         <button
           className={`filter-btn ${filter === "all" ? "active" : ""}`}
           onClick={() => setFilter("all")}
         >
-          All ({potholeData.length.toLocaleString()})
+          All ({dateFilteredData.length.toLocaleString()})
         </button>
         <button
           className={`filter-btn ${filter === "Open" ? "active" : ""}`}
@@ -179,7 +282,7 @@ function App() {
         <a href="https://github.com/syedoma/Team---ColdBlackCoffee">
           Team ColdBlackCoffee
         </a>{" "}
-        at SpartaHack 2026 ☕
+        at SpartaHack 2024 ☕
       </div>
     </div>
   );

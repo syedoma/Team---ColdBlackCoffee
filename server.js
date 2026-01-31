@@ -23,13 +23,11 @@ app.get("/api/potholes", async (req, res) => {
     return res.json(cachedPotholes);
   }
 
-  // No cache, return empty and let client use streaming endpoint
   res.json([]);
 });
 
 // Streaming endpoint - sends data as it's fetched
 app.get("/api/potholes/stream", async (req, res) => {
-  // Set headers for Server-Sent Events
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -53,6 +51,7 @@ app.get("/api/potholes/stream", async (req, res) => {
           f: "json",
           resultRecordCount: batchSize,
           resultOffset: offset,
+          orderByFields: "created_at DESC", // Get newest first!
         },
       });
 
@@ -68,13 +67,16 @@ app.get("/api/potholes/stream", async (req, res) => {
           status: f.attributes.status,
           address: f.attributes.address,
           neighborhood: f.attributes.neighborhood,
+          council_district: f.attributes.council_district,
+          zip_code: f.attributes.zip_code,
+          created_at: f.attributes.created_at,
+          closed_at: f.attributes.closed_at,
           latitude: f.attributes.latitude,
           longitude: f.attributes.longitude,
         }));
 
         allPotholes = allPotholes.concat(potholes);
 
-        // Send this batch to the client
         res.write(
           `data: ${JSON.stringify({ batch: potholes, total: allPotholes.length })}\n\n`,
         );
@@ -97,7 +99,16 @@ app.get("/api/potholes/stream", async (req, res) => {
     cachedPotholes = allPotholes;
     lastFetchTime = Date.now();
 
-    // Send done signal
+    // Log date range
+    const dates = allPotholes
+      .filter((p) => p.created_at)
+      .map((p) => p.created_at);
+    const minDate = new Date(Math.min(...dates));
+    const maxDate = new Date(Math.max(...dates));
+    console.log(
+      `Date range: ${minDate.toDateString()} to ${maxDate.toDateString()}`,
+    );
+
     res.write(
       `data: ${JSON.stringify({ done: true, total: allPotholes.length })}\n\n`,
     );

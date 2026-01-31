@@ -268,3 +268,13 @@ body {
     opacity: 0.6;
   }
 }
+
+/* Filter Label */
+.filter-label {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  margin-right: 0.5rem;
+}

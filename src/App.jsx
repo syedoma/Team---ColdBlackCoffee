@@ -282,7 +282,7 @@ function App() {
         <a href="https://github.com/syedoma/Team---ColdBlackCoffee">
           Team ColdBlackCoffee
         </a>{" "}
-        at SpartaHack 2024 ☕
+        at SpartaHack 2026 ☕
       </div>
     </div>
   );

@@ -16,28 +16,23 @@ function HeatmapLayer({ points }) {
     let radius, blur, intensity;
 
     if (count < 100) {
-      // Very few points (like Open: 36)
       radius = 25;
       blur = 30;
       intensity = 1.0;
     } else if (count < 500) {
-      // Small set (like Acknowledged: 795)
       radius = 18;
       blur = 20;
       intensity = 0.7;
     } else if (count < 2000) {
-      // Medium set (like Closed: 1715)
       radius = 12;
       blur = 15;
       intensity = 0.5;
     } else {
-      // Large set (like Archived or All)
       radius = 8;
       blur = 10;
       intensity = 0.3;
     }
 
-    // Update point intensities
     const adjustedPoints = points.map((p) => [p[0], p[1], intensity]);
 
     const heat = L.heatLayer(adjustedPoints, {
@@ -85,7 +80,7 @@ function Map({ potholes }) {
       maxZoom={18}
       maxBounds={detroitBounds}
       maxBoundsViscosity={1.0}
-      style={{ height: "100%", width: "100%" }}
+      style={{ height: "600px", width: "100%" }}
       zoomControl={true}
     >
       <TileLayer
@@ -93,7 +88,7 @@ function Map({ potholes }) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
       />
 
-      <HeatmapLayer points={points} />
+      {points.length > 0 && <HeatmapLayer points={points} />}
 
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"

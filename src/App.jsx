@@ -6,17 +6,42 @@ function App() {
   const [potholeData, setPotholeData] = useState([]);
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState("");
 
   useEffect(() => {
-    fetch("/potholes.json")
+    // Try to fetch from our backend API first
+    fetch("http://localhost:3001/api/potholes")
       .then((response) => response.json())
       .then((data) => {
-        setPotholeData(data);
+        console.log("Received data:", data);
+        console.log("Data length:", data.length);
+        console.log("Is array:", Array.isArray(data));
+
+        if (Array.isArray(data) && data.length > 0) {
+          // Log unique status values
+          const statuses = [...new Set(data.map((p) => p.status))];
+          console.log("Unique statuses:", statuses);
+          console.log("Sample record:", data[0]);
+
+          setPotholeData(data);
+          setDataSource("live");
+          console.log(`Loaded ${data.length} potholes from live API`);
+        } else {
+          throw new Error("Invalid data format");
+        }
         setLoading(false);
       })
       .catch((error) => {
-        console.error("Error loading data:", error);
-        setLoading(false);
+        console.error("Backend API failed, using local file:", error);
+        // Fallback to local file
+        fetch("/potholes.json")
+          .then((response) => response.json())
+          .then((data) => {
+            setPotholeData(data);
+            setDataSource("local");
+            console.log(`Loaded ${data.length} potholes from local file`);
+            setLoading(false);
+          });
       });
   }, []);
 
@@ -46,6 +71,11 @@ function App() {
             Visualizing {potholeData.length.toLocaleString()} pothole reports
             across Detroit to help identify infrastructure priorities.
           </p>
+          {dataSource && (
+            <span className={`data-badge ${dataSource}`}>
+              {dataSource === "live" ? "🟢 Live Data" : "📁 Cached Data"}
+            </span>
+          )}
         </div>
 
         <div className="stats-container">

@@ -10,11 +10,41 @@ function HeatmapLayer({ points }) {
   useEffect(() => {
     if (points.length === 0) return;
 
-    const heat = L.heatLayer(points, {
-      radius: 8,
-      blur: 10,
+    // Adjust heatmap settings based on number of points
+    const count = points.length;
+
+    let radius, blur, intensity;
+
+    if (count < 100) {
+      // Very few points (like Open: 36)
+      radius = 25;
+      blur = 30;
+      intensity = 1.0;
+    } else if (count < 500) {
+      // Small set (like Acknowledged: 795)
+      radius = 18;
+      blur = 20;
+      intensity = 0.7;
+    } else if (count < 2000) {
+      // Medium set (like Closed: 1715)
+      radius = 12;
+      blur = 15;
+      intensity = 0.5;
+    } else {
+      // Large set (like Archived or All)
+      radius = 8;
+      blur = 10;
+      intensity = 0.3;
+    }
+
+    // Update point intensities
+    const adjustedPoints = points.map((p) => [p[0], p[1], intensity]);
+
+    const heat = L.heatLayer(adjustedPoints, {
+      radius: radius,
+      blur: blur,
       maxZoom: 15,
-      minOpacity: 0.3,
+      minOpacity: 0.4,
       gradient: {
         0.0: "#0d0221",
         0.2: "#3d1a78",
@@ -38,10 +68,9 @@ function HeatmapLayer({ points }) {
 function Map({ potholes }) {
   const detroitCenter = [42.3514, -83.0658];
 
-  // Detroit bounding box - locks the map to this area
   const detroitBounds = [
-    [42.25, -83.3], // Southwest corner
-    [42.5, -82.9], // Northeast corner
+    [42.25, -83.3],
+    [42.5, -82.9],
   ];
 
   const points = potholes
@@ -59,16 +88,13 @@ function Map({ potholes }) {
       style={{ height: "100%", width: "100%" }}
       zoomControl={true}
     >
-      {/* Dark base layer without labels */}
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
       />
 
-      {/* Heatmap */}
       <HeatmapLayer points={points} />
 
-      {/* Light labels on top */}
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
         pane="shadowPane"

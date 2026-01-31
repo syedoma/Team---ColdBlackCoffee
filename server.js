@@ -7,26 +7,48 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 
-// API endpoint to fetch potholes from Detroit
+// Cache storage
+let cachedPotholes = null;
+let lastFetchTime = null;
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
+
+// Regular endpoint (returns cached data instantly if available)
 app.get("/api/potholes", async (req, res) => {
+  if (
+    cachedPotholes &&
+    lastFetchTime &&
+    Date.now() - lastFetchTime < CACHE_DURATION
+  ) {
+    console.log("Serving cached data");
+    return res.json(cachedPotholes);
+  }
+
+  // No cache, return empty and let client use streaming endpoint
+  res.json([]);
+});
+
+// Streaming endpoint - sends data as it's fetched
+app.get("/api/potholes/stream", async (req, res) => {
+  // Set headers for Server-Sent Events
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const apiUrl =
+    "https://services2.arcgis.com/qvkbeam7Wirps6zC/arcgis/rest/services/improve_detroit/FeatureServer/0/query";
+
+  let allPotholes = [];
+  let offset = 0;
+  const batchSize = 1000;
+  let keepGoing = true;
+
   try {
-    const apiUrl =
-      "https://services2.arcgis.com/qvkbeam7Wirps6zC/arcgis/rest/services/improve_detroit/FeatureServer/0/query";
-
-    console.log("Fetching from Detroit API...");
-
-    let allPotholes = [];
-    let offset = 0;
-    const batchSize = 1000;
-    let keepGoing = true;
-
     while (keepGoing) {
-      console.log(`Fetching batch at offset ${offset}...`);
-
       const response = await axios.get(apiUrl, {
         params: {
           where: "request_type LIKE '%Pothole%'",
-          outFields: "*",
+          outFields:
+            "ObjectId,status,address,neighborhood,council_district,zip_code,created_at,closed_at,latitude,longitude",
           outSR: "4326",
           f: "json",
           resultRecordCount: batchSize,
@@ -42,43 +64,48 @@ app.get("/api/potholes", async (req, res) => {
         data.features.length > 0
       ) {
         const potholes = data.features.map((f) => ({
-          id: f.attributes.ObjectId || f.attributes.issue_id,
+          id: f.attributes.ObjectId,
           status: f.attributes.status,
           address: f.attributes.address,
           neighborhood: f.attributes.neighborhood,
-          council_district: f.attributes.council_district,
-          zip_code: f.attributes.zip_code,
-          created_at: f.attributes.created_at,
-          closed_at: f.attributes.closed_at,
           latitude: f.attributes.latitude,
           longitude: f.attributes.longitude,
         }));
 
         allPotholes = allPotholes.concat(potholes);
-        console.log(
-          `Got ${potholes.length} potholes (total: ${allPotholes.length})`,
+
+        // Send this batch to the client
+        res.write(
+          `data: ${JSON.stringify({ batch: potholes, total: allPotholes.length })}\n\n`,
         );
 
-        // If we got a full batch, there might be more
+        console.log(
+          `Streamed batch: ${potholes.length} (total: ${allPotholes.length})`,
+        );
+
         if (potholes.length === batchSize) {
           offset += batchSize;
         } else {
-          // Got less than a full batch, we're done
           keepGoing = false;
         }
       } else {
-        // No features returned, we're done
         keepGoing = false;
       }
     }
 
-    console.log(
-      `Fetched ${allPotholes.length} total potholes from Detroit API`,
+    // Update cache
+    cachedPotholes = allPotholes;
+    lastFetchTime = Date.now();
+
+    // Send done signal
+    res.write(
+      `data: ${JSON.stringify({ done: true, total: allPotholes.length })}\n\n`,
     );
-    res.json(allPotholes);
+    res.end();
   } catch (error) {
-    console.error("CATCH ERROR:", error.message);
-    res.status(500).json({ error: "Failed to fetch pothole data" });
+    console.error("Stream error:", error.message);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
   }
 });
 

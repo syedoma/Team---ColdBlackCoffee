@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Map from "./components/Map";
 import "./App.css";
 
@@ -7,43 +7,81 @@ function App() {
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState("");
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const hasStartedFetching = useRef(false);
 
   useEffect(() => {
-    // Try to fetch from our backend API first
+    // Prevent double-fetch in React Strict Mode
+    if (hasStartedFetching.current) return;
+    hasStartedFetching.current = true;
+
+    // First try to get cached data
     fetch("http://localhost:3001/api/potholes")
       .then((response) => response.json())
       .then((data) => {
-        console.log("Received data:", data);
-        console.log("Data length:", data.length);
-        console.log("Is array:", Array.isArray(data));
-
         if (Array.isArray(data) && data.length > 0) {
-          // Log unique status values
-          const statuses = [...new Set(data.map((p) => p.status))];
-          console.log("Unique statuses:", statuses);
-          console.log("Sample record:", data[0]);
-
+          // Cache hit - use it immediately
           setPotholeData(data);
           setDataSource("live");
-          console.log(`Loaded ${data.length} potholes from live API`);
+          setLoading(false);
+          console.log(`Loaded ${data.length} potholes from cache`);
         } else {
-          throw new Error("Invalid data format");
+          // No cache - use streaming endpoint
+          streamPotholes();
         }
-        setLoading(false);
       })
       .catch((error) => {
-        console.error("Backend API failed, using local file:", error);
-        // Fallback to local file
-        fetch("/potholes.json")
-          .then((response) => response.json())
-          .then((data) => {
-            setPotholeData(data);
-            setDataSource("local");
-            console.log(`Loaded ${data.length} potholes from local file`);
-            setLoading(false);
-          });
+        console.error("API failed, trying stream:", error);
+        streamPotholes();
       });
   }, []);
+
+  const streamPotholes = () => {
+    setDataSource("streaming");
+    setPotholeData([]); // Clear any existing data
+
+    const eventSource = new EventSource(
+      "http://localhost:3001/api/potholes/stream",
+    );
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.done) {
+        setLoading(false);
+        setDataSource("live");
+        eventSource.close();
+        console.log(`Stream complete: ${data.total} potholes`);
+      } else if (data.error) {
+        console.error("Stream error:", data.error);
+        eventSource.close();
+        // Fallback to local file
+        fetch("/potholes.json")
+          .then((res) => res.json())
+          .then((localData) => {
+            setPotholeData(localData);
+            setDataSource("local");
+            setLoading(false);
+          });
+      } else if (data.batch) {
+        // Add new batch to existing data
+        setPotholeData((prev) => [...prev, ...data.batch]);
+        setLoadingProgress(data.total);
+      }
+    };
+
+    eventSource.onerror = () => {
+      eventSource.close();
+      // Fallback to local file
+      fetch("/potholes.json")
+        .then((res) => res.json())
+        .then((localData) => {
+          setPotholeData(localData);
+          setDataSource("local");
+          setLoading(false);
+        });
+    };
+  };
 
   const filteredData = potholeData.filter((p) => {
     if (filter === "all") return true;
@@ -68,12 +106,15 @@ function App() {
             Detroit Pothole Heatmap
           </h1>
           <p>
-            Visualizing {potholeData.length.toLocaleString()} pothole reports
-            across Detroit to help identify infrastructure priorities.
+            {dataSource === "streaming"
+              ? `Loading ${loadingProgress.toLocaleString()} pothole reports...`
+              : `Visualizing ${potholeData.length.toLocaleString()} pothole reports across Detroit to help identify infrastructure priorities.`}
           </p>
           {dataSource && (
             <span className={`data-badge ${dataSource}`}>
-              {dataSource === "live" ? "🟢 Live Data" : "📁 Cached Data"}
+              {dataSource === "live" && "🟢 Live Data"}
+              {dataSource === "local" && "📁 Cached Data"}
+              {dataSource === "streaming" && "⏳ Loading..."}
             </span>
           )}
         </div>
@@ -128,13 +169,9 @@ function App() {
       </div>
 
       <div className="map-section">
-        {loading ? (
-          <div className="loading">Loading pothole data</div>
-        ) : (
-          <div className="map-container">
-            <Map potholes={filteredData} />
-          </div>
-        )}
+        <div className="map-container">
+          <Map potholes={filteredData} />
+        </div>
       </div>
 
       <div className="footer">

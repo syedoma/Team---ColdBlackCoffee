@@ -9,6 +9,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState("");
   const [loadingProgress, setLoadingProgress] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const hasStartedFetching = useRef(false);
 
   useEffect(() => {
@@ -22,7 +23,7 @@ function App() {
           setPotholeData(data);
           setDataSource("live");
           setLoading(false);
-          console.log(`Loaded ${data.length} potholes from cache`);
+          setLastUpdated(new Date());
         } else {
           streamPotholes();
         }
@@ -47,10 +48,9 @@ function App() {
       if (data.done) {
         setLoading(false);
         setDataSource("live");
+        setLastUpdated(new Date());
         eventSource.close();
-        console.log(`Stream complete: ${data.total} potholes`);
       } else if (data.error) {
-        console.error("Stream error:", data.error);
         eventSource.close();
         fetch("/potholes.json")
           .then((res) => res.json())
@@ -58,6 +58,7 @@ function App() {
             setPotholeData(localData);
             setDataSource("local");
             setLoading(false);
+            setLastUpdated(new Date());
           });
       } else if (data.batch) {
         setPotholeData((prev) => [...prev, ...data.batch]);
@@ -73,6 +74,7 @@ function App() {
           setPotholeData(localData);
           setDataSource("local");
           setLoading(false);
+          setLastUpdated(new Date());
         });
     };
   };
@@ -87,35 +89,27 @@ function App() {
 
     let cutoffDate;
     switch (dateFilter) {
-      case "7days":
+      case "7d":
         cutoffDate = now - 7 * dayMs;
         break;
-      case "30days":
+      case "30d":
         cutoffDate = now - 30 * dayMs;
         break;
-      case "90days":
+      case "90d":
         cutoffDate = now - 90 * dayMs;
         break;
-      case "1year":
+      case "1y":
         cutoffDate = now - yearMs;
         break;
       case "2025":
         return potholeData.filter((p) => {
           if (!p.created_at) return false;
-          const year = new Date(p.created_at).getFullYear();
-          return year === 2025;
+          return new Date(p.created_at).getFullYear() === 2025;
         });
       case "2024":
         return potholeData.filter((p) => {
           if (!p.created_at) return false;
-          const year = new Date(p.created_at).getFullYear();
-          return year === 2024;
-        });
-      case "2023":
-        return potholeData.filter((p) => {
-          if (!p.created_at) return false;
-          const year = new Date(p.created_at).getFullYear();
-          return year === 2023;
+          return new Date(p.created_at).getFullYear() === 2024;
         });
       default:
         return potholeData;
@@ -128,7 +122,6 @@ function App() {
 
   const dateFilteredData = getDateFilteredData();
 
-  // Then filter by status
   const filteredData = dateFilteredData.filter((p) => {
     if (filter === "all") return true;
     return p.status === filter;
@@ -145,145 +138,167 @@ function App() {
     (p) => p.status === "Archived",
   ).length;
 
+  const timeFilters = [
+    { id: "all", label: "All Time" },
+    { id: "7d", label: "7d" },
+    { id: "30d", label: "30d" },
+    { id: "90d", label: "90d" },
+    { id: "2025", label: "2025" },
+    { id: "2024", label: "2024" },
+  ];
+
+  const statusFilters = [
+    { id: "all", label: "All", count: dateFilteredData.length },
+    { id: "Open", label: "Open", count: openCount },
+    { id: "Closed", label: "Closed", count: closedCount },
+    { id: "Archived", label: "Archived", count: archivedCount },
+  ];
+
+  const getTimeSince = () => {
+    if (!lastUpdated) return "Loading...";
+    const seconds = Math.floor((new Date() - lastUpdated) / 1000);
+    if (seconds < 60) return "Just now";
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+  };
+
   return (
-    <div className="App">
-      <div className="header">
+    <div className="app">
+      {/* Grid texture overlay */}
+      <div className="grid-overlay" />
+
+      {/* Header */}
+      <header className="header">
         <div className="header-left">
-          <h1>
-            <span className="icon">🕳️</span>
-            Detroit Pothole Heatmap
-          </h1>
-          <p>
-            {dataSource === "streaming"
-              ? `Loading ${loadingProgress.toLocaleString()} pothole reports...`
-              : `Visualizing ${filteredData.length.toLocaleString()} pothole reports across Detroit to help identify infrastructure priorities.`}
-          </p>
-          {dataSource && (
-            <span className={`data-badge ${dataSource}`}>
-              {dataSource === "live" && "🟢 Live Data"}
-              {dataSource === "local" && "📁 Cached Data"}
-              {dataSource === "streaming" && "⏳ Loading..."}
-            </span>
+          <div className="logo-section">
+            {/* Hexagonal logo */}
+            <div className="logo">
+              <svg viewBox="0 0 36 36" fill="none">
+                <path
+                  d="M18 2L32 10V26L18 34L4 26V10L18 2Z"
+                  fill="none"
+                  stroke="#d97706"
+                  strokeWidth="2"
+                />
+                <circle cx="18" cy="18" r="5" fill="#d97706" />
+                <circle cx="18" cy="18" r="2" fill="#0d0d0d" />
+              </svg>
+            </div>
+            <div className="title-section">
+              <h1>Detroit Pothole Tracker</h1>
+              <p className="subtitle">
+                City Infrastructure Dashboard · Wayne County
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="header-right">
+          {/* Primary stat */}
+          <div className="primary-stat">
+            <div className="stat-label">Total Reports</div>
+            <div className="stat-value-large">
+              {dataSource === "streaming"
+                ? loadingProgress.toLocaleString()
+                : dateFilteredData.length.toLocaleString()}
+            </div>
+          </div>
+
+          {/* Secondary stats */}
+          <div className="secondary-stats">
+            <div className="stat-badge open">
+              <div className="badge-dot green" />
+              <span className="badge-label">Open</span>
+              <span className="badge-value green">{openCount}</span>
+            </div>
+            <div className="stat-badge closed">
+              <div className="badge-dot yellow" />
+              <span className="badge-label">Closed</span>
+              <span className="badge-value yellow">
+                {closedCount.toLocaleString()}
+              </span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Filter bar */}
+      <div className="filter-bar">
+        {/* Time filters */}
+        <div className="filter-group">
+          <span className="filter-group-label">Period</span>
+          {timeFilters.map((f) => (
+            <button
+              key={f.id}
+              className={`time-filter-btn ${dateFilter === f.id ? "active" : ""}`}
+              onClick={() => setDateFilter(f.id)}
+            >
+              {f.label}
+              {dateFilter === f.id && <div className="active-indicator" />}
+            </button>
+          ))}
+        </div>
+
+        <div className="filter-divider" />
+
+        {/* Status filters */}
+        <div className="filter-group">
+          <span className="filter-group-label">Status</span>
+          {statusFilters.map((f) => (
+            <button
+              key={f.id}
+              className={`status-filter-btn ${filter === f.id ? "active" : ""}`}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+              <span className="filter-count">{f.count.toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Map container */}
+      <div className="map-wrapper">
+        <div className="map-container">
+          {loading && potholeData.length === 0 ? (
+            <div className="loading-state">
+              <div className="loading-spinner" />
+              <span>Loading pothole data...</span>
+            </div>
+          ) : (
+            <Map potholes={filteredData} />
           )}
         </div>
 
-        <div className="stats-container">
-          <div className="stat-card">
-            <div className="label">Total Reports</div>
-            <div className="value">{filteredData.length.toLocaleString()}</div>
-          </div>
-          <div className="stat-card">
-            <div className="label">Open</div>
-            <div className="value accent">{openCount.toLocaleString()}</div>
-          </div>
-          <div className="stat-card">
-            <div className="label">Closed</div>
-            <div className="value">{closedCount.toLocaleString()}</div>
+        {/* Legend */}
+        <div className="map-legend">
+          <div className="legend-title">Report Density</div>
+          <div className="legend-content">
+            <span className="legend-label">Low</span>
+            <div className="legend-gradient" />
+            <span className="legend-label">High</span>
           </div>
         </div>
       </div>
 
-      {/* Date Filter */}
-      <div className="filter-section">
-        <span className="filter-label">Time Period:</span>
-        <button
-          className={`filter-btn ${dateFilter === "all" ? "active" : ""}`}
-          onClick={() => setDateFilter("all")}
-        >
-          All Time
-        </button>
-        <button
-          className={`filter-btn ${dateFilter === "7days" ? "active" : ""}`}
-          onClick={() => setDateFilter("7days")}
-        >
-          Last 7 Days
-        </button>
-        <button
-          className={`filter-btn ${dateFilter === "30days" ? "active" : ""}`}
-          onClick={() => setDateFilter("30days")}
-        >
-          Last 30 Days
-        </button>
-        <button
-          className={`filter-btn ${dateFilter === "90days" ? "active" : ""}`}
-          onClick={() => setDateFilter("90days")}
-        >
-          Last 90 Days
-        </button>
-        <button
-          className={`filter-btn ${dateFilter === "1year" ? "active" : ""}`}
-          onClick={() => setDateFilter("1year")}
-        >
-          Last Year
-        </button>
-        <button
-          className={`filter-btn ${dateFilter === "2025" ? "active" : ""}`}
-          onClick={() => setDateFilter("2025")}
-        >
-          2025
-        </button>
-        <button
-          className={`filter-btn ${dateFilter === "2024" ? "active" : ""}`}
-          onClick={() => setDateFilter("2024")}
-        >
-          2024
-        </button>
-        <button
-          className={`filter-btn ${dateFilter === "2023" ? "active" : ""}`}
-          onClick={() => setDateFilter("2023")}
-        >
-          2023
-        </button>
-      </div>
-
-      {/* Status Filter */}
-      <div className="filter-section">
-        <span className="filter-label">Status:</span>
-        <button
-          className={`filter-btn ${filter === "all" ? "active" : ""}`}
-          onClick={() => setFilter("all")}
-        >
-          All ({dateFilteredData.length.toLocaleString()})
-        </button>
-        <button
-          className={`filter-btn ${filter === "Open" ? "active" : ""}`}
-          onClick={() => setFilter("Open")}
-        >
-          Open ({openCount})
-        </button>
-        <button
-          className={`filter-btn ${filter === "Acknowledged" ? "active" : ""}`}
-          onClick={() => setFilter("Acknowledged")}
-        >
-          Acknowledged ({acknowledgedCount})
-        </button>
-        <button
-          className={`filter-btn ${filter === "Closed" ? "active" : ""}`}
-          onClick={() => setFilter("Closed")}
-        >
-          Closed ({closedCount})
-        </button>
-        <button
-          className={`filter-btn ${filter === "Archived" ? "active" : ""}`}
-          onClick={() => setFilter("Archived")}
-        >
-          Archived ({archivedCount})
-        </button>
-      </div>
-
-      <div className="map-section">
-        <div className="map-container">
-          <Map potholes={filteredData} />
+      {/* Footer */}
+      <footer className="footer">
+        <div className="footer-left">
+          <div className="sync-status">
+            <div
+              className={`sync-dot ${dataSource === "live" ? "live" : ""}`}
+            />
+            <span>
+              {dataSource === "streaming"
+                ? "Syncing with Detroit Open Data Portal..."
+                : "Synced with Detroit Open Data Portal"}
+            </span>
+          </div>
+          <span className="footer-divider">|</span>
+          <span className="last-updated">Last updated: {getTimeSince()}</span>
         </div>
-      </div>
-
-      <div className="footer">
-        Built by{" "}
-        <a href="https://github.com/syedoma/Team---ColdBlackCoffee">
-          Team ColdBlackCoffee
-        </a>{" "}
-        at SpartaHack 2026 ☕
-      </div>
+        <div className="footer-right">SpartaHack XI · Team ColdBlackCoffee</div>
+      </footer>
     </div>
   );
 }
